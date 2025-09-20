@@ -1,0 +1,75 @@
+// ----------------------------
+// Nitrogen Dioxide (NO2) Trends over Ghana
+// Using Sentinel-5P (TROPOMI) data in Google Earth Engine
+// ----------------------------
+
+// 1. Define the region of interest (ROI): Ghana boundary
+var roi = ee.FeatureCollection("USDOS/LSIB_SIMPLE/2017")
+            .filter(ee.Filter.eq('country_na', 'Ghana')); // filter boundary by country name
+
+// Center map view over Ghana
+Map.centerObject(roi, 6.5);
+Map.addLayer(roi);
+
+// 2. Load Sentinel-5P NO2 dataset for January 2025
+var NO2 = ee.ImageCollection("COPERNICUS/S5P/OFFL/L3_NO2") 
+            .select('NO2_column_number_density')    // select NO2 column density band
+            .filterDate('2025-01-01', '2025-01-31') // time filter (January 2025)
+            .filterBounds(roi);                     // spatial filter (within Ghana)
+
+// Print the number of available images   
+print(NO2.size())
+
+// 3. Convert NO2 values from mol/m² to micromole/m²
+// (1 mol = 1,000,000 micromoles)
+var micromole = NO2.map(function (img){
+  return img.multiply(1000000)
+  .copyProperties(img, ['system:time_start', 'system:time_end']) 
+});
+
+// 4. Create a time series chart of NO2 over Ghana
+var chart = ui.Chart.image.series({
+  imageCollection: micromole, 
+  region: roi, 
+  reducer: ee.Reducer.mean(), 
+  scale: 1113.2, 
+  xProperty: 'system:time_start'
+}).setOptions({
+  title:'NO2 Time Series Chart',
+  vAxis: {tilte: 'Micromole/m2'},
+  hAxis: {title:'Time'},
+  interpolateNulls: true,
+  trendlines: {
+    0:{type: 'linear',
+    color: 'red',
+    linewidth: 6,
+    visibleInLegend: true
+   }
+ }
+});
+
+print(chart);
+
+// 5. Compute mean NO2 distribution (spatial average of January 2025)
+var NO2_mean = micromole.mean().clip(roi);
+
+// 6. Visualization parameters
+var visParams = {
+  min: 47.35096458581311,
+  max: 99.49040482562746,
+  palette: ['black', 'blue', 'purple', 'cyan', 'green', 'yellow', 'red']
+};
+
+// Add NO2 map layer
+Map.addLayer(NO2_mean, visParams, 'Nitrogen Dioxide OF GHANA')
+
+
+// Export the image
+Export.image.toDrive({
+  image: mean_NO2, 
+  description: 'NO2_image', 
+  folder: 'GEE', 
+  fileNamePrefix: 'NO2',
+  region: roi, 
+  scale: 1113.2,
+  });
